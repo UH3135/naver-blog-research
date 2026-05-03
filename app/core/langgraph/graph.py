@@ -57,7 +57,7 @@ class LangGraphAgent:
     including LLM interactions, database connections, and response processing.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the LangGraph Agent with necessary components."""
         # Use the LLM service with tools bound
         self.llm_service = llm_service
@@ -93,7 +93,8 @@ class LangGraphAgent:
                         "config": {"model": settings.LONG_TERM_MEMORY_MODEL},
                     },
                     "embedder": {"provider": "openai", "config": {"model": settings.LONG_TERM_MEMORY_EMBEDDER_MODEL}},
-                    # "custom_fact_extraction_prompt": load_custom_fact_extraction_prompt(),
+                    # TODO: support custom fact extraction prompt for mem0
+                    #       (requires app/core/prompts/custom_fact_extraction.md + loader)
                 }
             )
         return self.memory
@@ -179,6 +180,8 @@ class LangGraphAgent:
 
         Args:
             state (GraphState): The current state of the conversation.
+            config (RunnableConfig): LangGraph runtime config; expects
+                ``configurable.thread_id`` to be set for session logging.
 
         Returns:
             Command: Command object with updated state and next node to execute.
@@ -274,6 +277,21 @@ class LangGraphAgent:
                     if settings.ENVIRONMENT != Environment.PRODUCTION:
                         raise Exception("Connection pool initialization failed")
 
+                # TODO: cap the chat ⇄ tool_call agent loop with an explicit limit.
+                # Currently no max-turn is configured anywhere, so the loop only
+                # stops via LangGraph's default recursion_limit=25. Each ReAct
+                # cycle (chat → tool_call → chat) consumes 3 node steps, which
+                # leaves room for only ~12 tool calls before GraphRecursionError.
+                # Plan:
+                #   1) Expose AGENT_RECURSION_LIMIT in settings and pass it via
+                #      RunnableConfig (or `.with_config(recursion_limit=...)` here).
+                #   2) Add a tool-call-count guard inside `_chat` that forces
+                #      goto=END once `ToolMessage` count in state exceeds a
+                #      threshold, since recursion_limit is node-level and too
+                #      coarse for per-tool-call control.
+                #   3) Tighten the except block in `get_response` — current
+                #      `logger.error(f"...")` swallows the traceback and returns
+                #      None to the caller on GraphRecursionError.
                 self._graph = graph_builder.compile(
                     checkpointer=checkpointer, name=f"{settings.PROJECT_NAME} Agent ({settings.ENVIRONMENT.value})"
                 )
@@ -375,6 +393,11 @@ class LangGraphAgent:
         ) or "No relevant memory found."
 
         try:
+            # TODO: emit tool-calling lifecycle as discrete on-events instead of
+            # flattening every chunk's `.content` into the response stream.
+            # Plan: branch on chunk type (AIMessageChunk vs ToolMessage), surface
+            # tool_call name/args and tool results as `on_tool_call` / `on_tool_result`
+            # events so the client can render them separately from assistant tokens.
             async for token, _ in self._graph.astream(
                 {"messages": dump_messages(messages), "long_term_memory": relevant_memory},
                 config,

@@ -3,8 +3,9 @@
 This module sets up and configures Prometheus metrics for monitoring the application.
 """
 
-from prometheus_client import Counter, Histogram, Gauge
-from starlette_prometheus import metrics, PrometheusMiddleware
+from fastapi import FastAPI
+from prometheus_client import Counter, Gauge, Histogram
+from starlette_prometheus import PrometheusMiddleware, metrics
 
 # Request metrics
 http_requests_total = Counter("http_requests_total", "Total number of HTTP requests", ["method", "endpoint", "status"])
@@ -36,7 +37,7 @@ llm_stream_duration_seconds = Histogram(
 )
 
 
-def setup_metrics(app):
+def setup_metrics(app: FastAPI) -> None:
     """Set up Prometheus metrics middleware and endpoints.
 
     Args:

@@ -92,7 +92,7 @@ class LLMRegistry:
     ]
 
     @classmethod
-    def get(cls, model_name: str, **kwargs) -> BaseChatModel:
+    def get(cls, model_name: str, **kwargs: Any) -> BaseChatModel:
         """Get an LLM by name with optional argument overrides.
 
         Args:
@@ -158,7 +158,7 @@ class LLMService:
     rate limit handling, and circular fallback through all available models.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the LLM service."""
         self._llm: Optional[BaseChatModel] = None
         self._current_model_index: int = 0
@@ -268,7 +268,7 @@ class LLMService:
         self,
         messages: List[BaseMessage],
         model_name: Optional[str] = None,
-        **model_kwargs,
+        **model_kwargs: Any,
     ) -> BaseMessage:
         """Call the LLM with the specified messages and circular fallback.
 

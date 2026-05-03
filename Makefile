@@ -42,10 +42,15 @@ eval-no-report:
 	@bash -c "source scripts/set_env.sh ${ENV:-development} && python -m evals.main --no-report"
 
 lint:
-	ruff check .
+	uv run ruff check .
 
 format:
-	ruff format .
+	uv run ruff format .
+
+typecheck:
+	uv run mypy .
+
+check: lint typecheck
 
 clean:
 	rm -rf .venv
@@ -178,6 +183,10 @@ help:
 	@echo "  eval-quick: Run evaluation with default settings"
 	@echo "  eval-no-report: Run evaluation without generating report"
 	@echo "  test: Run tests"
+	@echo "  lint: Run ruff lint check"
+	@echo "  format: Run ruff formatter"
+	@echo "  typecheck: Run mypy type checker"
+	@echo "  check: Run lint + typecheck"
 	@echo "  clean: Clean up"
 	@echo "  docker-build: Build default Docker image"
 	@echo "  docker-build-env ENV=<environment>: Build Docker image for specific environment"
