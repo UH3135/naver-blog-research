@@ -57,7 +57,7 @@ class LangGraphAgent:
     including LLM interactions, database connections, and response processing.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the LangGraph Agent with necessary components."""
         # Use the LLM service with tools bound
         self.llm_service = llm_service

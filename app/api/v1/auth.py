@@ -155,7 +155,7 @@ async def get_current_session(
 
 @router.post("/register", response_model=UserResponse)
 @limiter.limit(settings.RATE_LIMIT_ENDPOINTS["register"][0])
-async def register_user(request: Request, user_data: UserCreate):
+async def register_user(request: Request, user_data: UserCreate) -> UserResponse:
     """Register a new user.
 
     Args:
@@ -193,7 +193,7 @@ async def register_user(request: Request, user_data: UserCreate):
 @limiter.limit(settings.RATE_LIMIT_ENDPOINTS["login"][0])
 async def login(
     request: Request, username: str = Form(...), password: str = Form(...), grant_type: str = Form(default="password")
-):
+) -> TokenResponse:
     """Login a user.
 
     Args:
@@ -237,7 +237,7 @@ async def login(
 
 
 @router.post("/session", response_model=SessionResponse)
-async def create_session(user: User = Depends(get_current_user)):
+async def create_session(user: User = Depends(get_current_user)) -> SessionResponse:
     """Create a new chat session for the authenticated user.
 
     Args:
@@ -273,7 +273,7 @@ async def create_session(user: User = Depends(get_current_user)):
 @router.patch("/session/{session_id}/name", response_model=SessionResponse)
 async def update_session_name(
     session_id: str, name: str = Form(...), current_session: Session = Depends(get_current_session)
-):
+) -> SessionResponse:
     """Update a session's name.
 
     Args:
@@ -307,7 +307,7 @@ async def update_session_name(
 
 
 @router.delete("/session/{session_id}")
-async def delete_session(session_id: str, current_session: Session = Depends(get_current_session)):
+async def delete_session(session_id: str, current_session: Session = Depends(get_current_session)) -> None:
     """Delete a session for the authenticated user.
 
     Args:
@@ -336,7 +336,7 @@ async def delete_session(session_id: str, current_session: Session = Depends(get
 
 
 @router.get("/sessions", response_model=List[SessionResponse])
-async def get_user_sessions(user: User = Depends(get_current_user)):
+async def get_user_sessions(user: User = Depends(get_current_user)) -> List[SessionResponse]:
     """Get all session IDs for the authenticated user.
 
     Args:

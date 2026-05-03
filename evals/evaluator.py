@@ -44,7 +44,7 @@ class Evaluator:
         langfuse: Langfuse client for trace management.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize Evaluator with OpenAI and Langfuse clients."""
         self.client = openai.AsyncOpenAI(api_key=settings.EVALUATION_API_KEY, base_url=settings.EVALUATION_BASE_URL)
         self.langfuse = Langfuse(
@@ -56,7 +56,7 @@ class Evaluator:
         self.report = initialize_report(settings.EVALUATION_LLM)
         initialize_metrics_summary(self.report, metrics)
 
-    async def run(self, generate_report_file=True):
+    async def run(self, generate_report_file: bool = True) -> None:
         """Main execution function that fetches and evaluates traces.
 
         Retrieves traces from Langfuse, evaluates each one against all metrics,
@@ -110,7 +110,7 @@ class Evaluator:
             duration_seconds=self.report["duration_seconds"],
         )
 
-    def _push_to_langfuse(self, trace: TraceWithDetails, score: ScoreSchema, metric: dict):
+    def _push_to_langfuse(self, trace: TraceWithDetails, score: ScoreSchema, metric: dict) -> None:
         """Push evaluation score to Langfuse.
 
         Args:

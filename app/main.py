@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import (
     Any,
+    AsyncGenerator,
     Dict,
 )
 
@@ -44,7 +45,7 @@ langfuse = Langfuse(
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown events."""
     logger.info(
         "application_startup",
@@ -80,7 +81,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Add validation exception handler
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Handle validation errors from request data.
 
     Args:
@@ -125,7 +126,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 @limiter.limit(settings.RATE_LIMIT_ENDPOINTS["root"][0])
-async def root(request: Request):
+async def root(request: Request) -> Dict[str, str]:
     """Root endpoint returning basic API information."""
     logger.info("root_endpoint_called")
     return {

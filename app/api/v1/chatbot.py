@@ -5,7 +5,11 @@ streaming chat, message history management, and chat history clearing.
 """
 
 import json
-from typing import List
+from typing import (
+    AsyncGenerator,
+    Dict,
+    List,
+)
 
 from fastapi import (
     APIRouter,
@@ -39,7 +43,7 @@ async def chat(
     request: Request,
     chat_request: ChatRequest,
     session: Session = Depends(get_current_session),
-):
+) -> ChatResponse:
     """Process a chat request using LangGraph.
 
     Args:
@@ -76,7 +80,7 @@ async def chat_stream(
     request: Request,
     chat_request: ChatRequest,
     session: Session = Depends(get_current_session),
-):
+) -> StreamingResponse:
     """Process a chat request using LangGraph with streaming response.
 
     Args:
@@ -97,7 +101,7 @@ async def chat_stream(
             message_count=len(chat_request.messages),
         )
 
-        async def event_generator():
+        async def event_generator() -> AsyncGenerator[str, None]:
             """Generate streaming events.
 
             Yields:
@@ -147,7 +151,7 @@ async def chat_stream(
 async def get_session_messages(
     request: Request,
     session: Session = Depends(get_current_session),
-):
+) -> ChatResponse:
     """Get all messages for a session.
 
     Args:
@@ -173,7 +177,7 @@ async def get_session_messages(
 async def clear_chat_history(
     request: Request,
     session: Session = Depends(get_current_session),
-):
+) -> Dict[str, str]:
     """Clear all messages for a session.
 
     Args:

@@ -31,7 +31,7 @@ class DatabaseService:
     It uses SQLModel for ORM operations and maintains a connection pool.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize database service with connection pool."""
         try:
             # Configure environment-specific database connection pool settings
@@ -223,7 +223,7 @@ class DatabaseService:
             logger.info("session_name_updated", session_id=session_id, name=name)
             return chat_session
 
-    def get_session_maker(self):
+    def get_session_maker(self) -> Session:
         """Get a session maker for creating database sessions.
 
         Returns:

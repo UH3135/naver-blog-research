@@ -2,11 +2,12 @@
 
 import os
 from datetime import datetime
+from typing import Any
 
 from app.core.config import settings
 
 
-def load_system_prompt(**kwargs):
+def load_system_prompt(**kwargs: Any) -> str:
     """Load the system prompt from the file."""
     with open(os.path.join(os.path.dirname(__file__), "system.md"), "r") as f:
         return f.read().format(

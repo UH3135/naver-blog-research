@@ -53,7 +53,7 @@ def get_environment() -> Environment:
 
 
 # Load appropriate .env file based on environment
-def load_env_file():
+def load_env_file() -> Optional[str]:
     """Load environment-specific .env file."""
     env = get_environment()
     print(f"Loading environment: {env}")
@@ -82,7 +82,7 @@ ENV_FILE = load_env_file()
 
 
 # Parse list values from environment variables
-def parse_list_from_env(env_key, default=None):
+def parse_list_from_env(env_key: str, default: Optional[List[str]] = None) -> List[str]:
     """Parse a comma-separated list from an environment variable."""
     value = os.getenv(env_key)
     if not value:
@@ -98,7 +98,9 @@ def parse_list_from_env(env_key, default=None):
 
 
 # Parse dict of lists from environment variables with prefix
-def parse_dict_of_lists_from_env(prefix, default_dict=None):
+def parse_dict_of_lists_from_env(
+    prefix: str, default_dict: Optional[Dict[str, List[str]]] = None
+) -> Dict[str, List[str]]:
     """Parse dictionary of lists from environment variables with a common prefix."""
     result = default_dict or {}
 
@@ -120,7 +122,7 @@ def parse_dict_of_lists_from_env(prefix, default_dict=None):
 class Settings:
     """Application settings without using pydantic."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize application settings from environment variables.
 
         Loads and sets all configuration values from environment variables,
@@ -209,7 +211,7 @@ class Settings:
         # Apply environment-specific settings
         self.apply_environment_settings()
 
-    def apply_environment_settings(self):
+    def apply_environment_settings(self) -> None:
         """Apply environment-specific settings based on the current environment."""
         env_settings = {
             Environment.DEVELOPMENT: {
