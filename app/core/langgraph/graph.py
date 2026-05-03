@@ -93,7 +93,8 @@ class LangGraphAgent:
                         "config": {"model": settings.LONG_TERM_MEMORY_MODEL},
                     },
                     "embedder": {"provider": "openai", "config": {"model": settings.LONG_TERM_MEMORY_EMBEDDER_MODEL}},
-                    # "custom_fact_extraction_prompt": load_custom_fact_extraction_prompt(),
+                    # TODO: support custom fact extraction prompt for mem0
+                    #       (requires app/core/prompts/custom_fact_extraction.md + loader)
                 }
             )
         return self.memory
