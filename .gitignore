@@ -7,6 +7,11 @@ wheels/
 *.egg-info
 *.jsonl
 
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
 # Virtual environments
 .venv
 
