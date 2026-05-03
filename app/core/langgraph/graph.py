@@ -180,6 +180,8 @@ class LangGraphAgent:
 
         Args:
             state (GraphState): The current state of the conversation.
+            config (RunnableConfig): LangGraph runtime config; expects
+                ``configurable.thread_id`` to be set for session logging.
 
         Returns:
             Command: Command object with updated state and next node to execute.
