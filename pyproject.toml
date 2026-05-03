@@ -41,7 +41,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["black", "isort", "flake8", "ruff", "djlint==1.36.4"]
+dev = ["ruff", "mypy"]
 
 [dependency-groups]
 test = ["httpx>=0.28.1", "pytest>=8.3.5"]
@@ -51,47 +51,13 @@ test = ["httpx>=0.28.1", "pytest>=8.3.5"]
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 
-[tool.black]
-line-length = 119
-exclude = "venv|migrations"
-
-[tool.flake8]
-docstring-convention = "all"
-ignore = ["D107", "D212", "E501", "W503", "W605", "D203", "D100"]
-exclude = "venv|migrations"
-max-line-length = 119
-
-# radon
-radon-max-cc = 10
-
-[tool.isort]
-profile = "black"
-multi_line_output = "VERTICAL_HANGING_INDENT"
-force_grid_wrap = 2
-line_length = 119
-skip = ["migrations", "venv"]
-
-[tool.pylint."messages control"]
-disable = [
-    "line-too-long",
-    "trailing-whitespace",
-    "missing-function-docstring",
-    "consider-using-f-string",
-    "import-error",
-    "too-few-public-methods",
-    "redefined-outer-name",
-]
-
-[tool.pylint.master]
-ignore = "migrations"
-
 [tool.ruff]
 line-length = 119
-exclude = ["migrations", "*.ipynb", "venv"]
+exclude = ["migrations", "*.ipynb", "venv", ".venv"]
 
 [tool.ruff.lint]
-# Enable flake8-bugbear (`B`) rules and docstring (`D`) rules
-select = ["E", "F", "B", "ERA", "D"]
+# E/F (pycodestyle/pyflakes), B (bugbear), ERA (eradicate), D (pydocstyle), I (isort)
+select = ["E", "F", "B", "ERA", "D", "I"]
 # Never enforce `E501` (line length violations).
 ignore = ["E501", "F401", "D203", "D213", "B904", "B008"]
 # Avoid trying to fix flake8-bugbear (`B`) violations.
@@ -103,3 +69,12 @@ convention = "google"
 # Ignore `E402` (import violations) in all `__init__.py` files
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.13"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+explicit_package_bases = true
+namespace_packages = true
+exclude = ["migrations", "\\.venv", "venv", "build", "dist"]
