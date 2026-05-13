@@ -1,85 +1,85 @@
-# Naver Blog Deep Agent Design
+# 네이버 블로그 딥 에이전트 설계
 
-## Overview
+## 개요
 
-This document defines the first implementation slice for a Naver blog restaurant analysis capability built on top of the current FastAPI and LangGraph project.
+이 문서는 현재 FastAPI + LangGraph 프로젝트 위에 구축할 네이버 블로그 기반 식당 분석 기능의 1차 구현 범위를 정의한다.
 
-The long-term goal is to expose the capability through API first, then reuse the same workflow from MCP, Discord, and other messaging surfaces. The core of the system is a LangGraph-based deep agent that orchestrates tool execution, validates intermediate results, and emits traceable workflow state to Langfuse.
+장기 목표는 이 기능을 우선 API로 제공하는 것이다. 시스템의 핵심은 LangGraph 기반 딥 에이전트이며, 이 에이전트는 도구 실행을 오케스트레이션하고, 중간 결과를 검증하며, 워크플로우 상태를 Langfuse에 추적 가능하게 남긴다.
 
-The first slice is intentionally narrow. It does not yet score restaurants or decide whether a restaurant is good or bad. It proves that the agent can:
+이번 1차 범위는 의도적으로 좁게 잡는다. 아직 식당의 좋고 나쁨을 판단하거나 점수를 매기지 않는다. 이번 단계에서 검증할 것은 아래 다섯 가지다.
 
-1. accept `restaurant_name` and `region`
-2. search Naver blog posts related to that restaurant
-3. fetch blog post content for selected results
-4. return structured preview data
-5. record the workflow in Langfuse so failures and retries are searchable
+1. `restaurant_name`과 `region`을 입력받는다.
+2. 해당 식당과 관련된 네이버 블로그 게시글을 검색한다.
+3. 선택된 블로그 게시글의 본문을 수집한다.
+4. 구조화된 미리보기 데이터를 반환한다.
+5. 실패와 재시도를 Langfuse에서 검색할 수 있도록 워크플로우를 기록한다.
 
-## Goals
+## 목표
 
-The first implementation must:
+1차 구현은 아래를 만족해야 한다.
 
-1. provide a dedicated API endpoint for Naver blog search preview
-2. execute a LangGraph workflow instead of a direct service call
-3. use Python-based tools for Naver blog search and blog content fetching
-4. return structured search and content preview data
-5. support partial success without failing the entire HTTP request
-6. emit searchable traces and metadata to Langfuse
+1. 네이버 블로그 검색 미리보기를 위한 전용 API 엔드포인트를 제공한다.
+2. 단순 서비스 호출이 아니라 LangGraph 워크플로우를 실행한다.
+3. 네이버 블로그 검색과 본문 수집을 Python 기반 도구로 구현한다.
+4. 구조화된 검색 결과와 본문 미리보기 데이터를 반환한다.
+5. 일부 수집 실패가 있어도 HTTP 요청 전체를 실패시키지 않는다.
+6. Langfuse에서 검색 가능한 trace와 메타데이터를 남긴다.
 
-## Non-Goals
+## 비목표
 
-The first implementation does not include:
+이번 1차 구현에는 아래 항목을 포함하지 않는다.
 
-1. ad detection and exclusion
-2. positive and negative review summarization
-3. free-form natural language restaurant discovery
-4. Discord or MCP integration
-5. long-term memory for search results
-6. production-grade ranking heuristics beyond basic query normalization and retry
+1. 광고성 여부 판별 및 제외
+2. 좋은 평가와 나쁜 평가 요약
+3. 자유문장 기반 식당 탐색
+4. 외부 채널 연동
+5. 검색 결과에 대한 장기 메모리 저장
+6. 기본적인 질의 정규화와 재시도 이상의 고도화된 랭킹 로직
 
-These are expected follow-up phases and should not be folded into the first implementation plan.
+이 항목들은 후속 단계로 다루며, 이번 구현 계획 범위에 섞어 넣지 않는다.
 
-## User Input and API Shape
+## 사용자 입력과 API 형태
 
-The first endpoint should be a dedicated API route outside the chatbot route group. A representative path is:
+1차 엔드포인트는 기존 chatbot 라우트와 분리된 전용 API로 둔다. 대표적인 경로 예시는 아래와 같다.
 
 `POST /api/v1/naver-blog/search-preview`
 
-The request model uses Pydantic validation and accepts:
+요청 모델은 Pydantic validation을 사용하며 아래 필드를 받는다.
 
 - `restaurant_name: str`
 - `region: str`
 - `max_results: int | None`
 
-Validation rules:
+검증 규칙은 아래와 같다.
 
-1. `restaurant_name` is required and non-empty
-2. `region` is required and non-empty
-3. `max_results` is optional but must stay inside a safe upper bound
+1. `restaurant_name`은 필수이며 비어 있으면 안 된다.
+2. `region`은 필수이며 비어 있으면 안 된다.
+3. `max_results`는 선택값이지만 안전한 상한선 안에 있어야 한다.
 
-Validation failures should be rejected by FastAPI and Pydantic with `422`.
+입력 검증 실패는 FastAPI와 Pydantic에 의해 `422`로 처리한다.
 
-## Response Contract
+## 응답 계약
 
-The endpoint should always try to return `200` for workflow execution outcomes, even when the workflow partially fails or fully fails after the request passed validation.
+요청이 validation을 통과한 뒤에는, 워크플로우 실행 중 일부 실패나 전체 실패가 발생하더라도 최대한 `200` 응답을 반환하도록 설계한다.
 
-Response fields:
+응답 필드는 아래를 포함한다.
 
 - `status`
   - `success`
   - `partial_success`
   - `failed`
 - `query`
-  - normalized input values
+  - 정규화된 입력값
 - `search_query`
-  - final query string used by the workflow
+  - 워크플로우에서 실제 사용한 검색어
 - `items`
-  - collected and optionally fetched blog results
+  - 수집되었고 필요시 본문까지 가져온 블로그 결과 목록
 - `errors`
-  - structured workflow errors
+  - 구조화된 워크플로우 에러 정보
 - `metadata`
-  - counts, retry information, and execution summary
+  - 개수, 재시도 여부, 실행 요약 정보
 
-Each item should include at least:
+각 `item`은 최소한 아래 필드를 포함한다.
 
 - `title`
 - `url`
@@ -90,13 +90,13 @@ Each item should include at least:
 - `raw_text_available`
 - `fetch_status`
 
-The first version should default to returning only excerpted content instead of the full raw body. This keeps payloads small and makes the preview endpoint safer to inspect.
+1차 버전은 기본적으로 본문 전체 `raw_text` 대신 `excerpt`만 응답에 포함한다. 이렇게 하면 payload 크기를 줄일 수 있고, preview 엔드포인트로 다루기에도 안전하다.
 
-## Workflow Architecture
+## 워크플로우 아키텍처
 
-The system should use a dedicated LangGraph workflow rather than embedding the full logic inside the API route.
+전체 로직은 API 라우트 내부에 직접 넣지 않고, 전용 LangGraph 워크플로우로 구성한다.
 
-The graph is composed of five responsibilities:
+그래프는 크게 다섯 가지 책임으로 나눈다.
 
 1. `input_normalization`
 2. `search_execution`
@@ -106,87 +106,87 @@ The graph is composed of five responsibilities:
 
 ### 1. Input Normalization Node
 
-Inputs:
+입력:
 
 - `restaurant_name`
 - `region`
 - `max_results`
 
-Responsibilities:
+책임:
 
-1. trim and normalize user input
-2. generate the initial search query
-3. store normalized values in graph state
+1. 사용자 입력을 trim하고 정규화한다.
+2. 초기 검색 질의를 생성한다.
+3. 정규화된 값을 graph state에 저장한다.
 
-Recommended first query pattern:
+권장 초기 검색 질의 패턴:
 
 - `"{region} {restaurant_name} 블로그"`
 
-This node does not call any external system.
+이 노드는 외부 시스템을 호출하지 않는다.
 
 ### 2. Search Execution Node
 
-Responsibilities:
+책임:
 
-1. invoke the `search_naver_blog` tool
-2. collect raw candidate blog results
-3. persist search output in graph state
+1. `search_naver_blog` 도구를 호출한다.
+2. 원본 후보 블로그 결과를 수집한다.
+3. 검색 결과를 graph state에 저장한다.
 
-This node should be instrumented so Langfuse captures:
+이 노드는 Langfuse에 아래 정보를 남길 수 있어야 한다.
 
-- normalized search query
-- number of results returned
-- execution duration
+- 정규화된 검색 질의
+- 반환된 결과 수
+- 실행 시간
 
 ### 3. Search Review Node
 
-Responsibilities:
+책임:
 
-1. validate that search output is structurally usable
-2. deduplicate obvious duplicate URLs
-3. select the subset to pass to the fetch step
-4. decide whether one retry is needed
+1. 검색 결과가 구조적으로 사용 가능한지 검증한다.
+2. 명백한 중복 URL을 제거한다.
+3. 다음 단계로 넘길 대상만 선택한다.
+4. 한 번의 재시도가 필요한지 판단한다.
 
-Retry policy for the first implementation:
+1차 구현의 재시도 정책:
 
-1. if zero usable results are returned, perform one retry with a fallback query
-2. fallback query example:
+1. 사용 가능한 결과가 0건이면 fallback 질의로 한 번 재시도한다.
+2. fallback 질의 예시:
    `"{restaurant_name} {region} 후기"`
-3. if the retry also returns zero usable results, finish with `status=failed`
+3. 재시도 후에도 사용 가능한 결과가 0건이면 `status=failed`로 종료한다.
 
-This node is the first self-recovery layer. It is intentionally bounded to one fallback attempt.
+이 노드는 첫 번째 자기회복 계층이다. 다만 1차에서는 한 번의 fallback 시도로 제한한다.
 
 ### 4. Content Fetch Node
 
-Responsibilities:
+책임:
 
-1. invoke `fetch_naver_blog_content` for selected URLs
-2. capture per-URL success or failure
-3. store fetched content and structured errors in graph state
+1. 선택된 URL들에 대해 `fetch_naver_blog_content` 도구를 호출한다.
+2. URL별 성공과 실패를 기록한다.
+3. 수집된 본문과 구조화된 에러를 graph state에 저장한다.
 
-The first implementation should fetch a limited number of top candidates. The exact default can be finalized in planning, but the design assumes a small number such as `3` to `5` for easier debugging and lower external load.
+1차 구현은 상위 일부 결과만 제한적으로 본문을 수집한다. 정확한 기본값은 구현 계획에서 확정하되, 설계상으로는 디버깅과 외부 부하를 고려해 `3`에서 `5`개 정도의 작은 수를 가정한다.
 
-If some URLs fail and some succeed, the workflow should continue and end as `partial_success`.
+일부 URL은 실패하고 일부는 성공하더라도 워크플로우는 계속 진행하며 최종 상태는 `partial_success`가 된다.
 
 ### 5. Response Assembly Node
 
-Responsibilities:
+책임:
 
-1. build the API response shape
-2. compute final status
-3. include execution metadata and structured errors
+1. API 응답 형태를 구성한다.
+2. 최종 상태값을 계산한다.
+3. 실행 메타데이터와 구조화된 에러를 포함한다.
 
-Status rules:
+상태 규칙:
 
-1. `success` when search and at least one content fetch succeeds without any recorded fetch error
-2. `partial_success` when at least one item succeeds and at least one error is present
-3. `failed` when no usable items are available after the workflow finishes
+1. 검색이 성공하고, 최소 1개 이상의 본문 수집이 성공했으며, 별도 fetch 에러가 없으면 `success`
+2. 최소 1개 이상의 성공 결과가 있지만 에러도 함께 존재하면 `partial_success`
+3. 워크플로우 종료 시점에 사용 가능한 결과가 하나도 없으면 `failed`
 
-## Graph State Design
+## Graph State 설계
 
-The workflow needs a dedicated state schema separate from the existing chatbot state.
+이 워크플로우는 기존 chatbot state와 분리된 전용 상태 스키마가 필요하다.
 
-State should include:
+state는 아래 필드를 포함한다.
 
 - `restaurant_name`
 - `region`
@@ -200,49 +200,49 @@ State should include:
 - `status`
 - `trace_metadata`
 
-This state should be implemented with a Pydantic model or typed schema consistent with existing LangGraph usage in the project.
+이 state는 현재 프로젝트의 LangGraph 사용 방식에 맞춰 Pydantic model 또는 typed schema로 구현한다.
 
-## Tool Design
+## 도구 설계
 
-The first implementation needs two Python tools.
+1차 구현에는 두 개의 Python 도구가 필요하다.
 
-### Tool 1: `search_naver_blog`
+### 도구 1: `search_naver_blog`
 
-Input:
+입력:
 
 - `query: str`
 - `max_results: int`
 
-Output:
+출력:
 
-- list of blog search candidates in normalized shape
+- 정규화된 형태의 블로그 검색 후보 목록
 
-Each result should include:
+각 결과는 아래 필드를 포함한다.
 
 - `title`
 - `url`
 - `snippet`
 - `blogger_name`
-- `published_at` when available
+- `published_at` 가능 시 포함
 
-Responsibilities:
+책임:
 
-1. execute Naver blog search
-2. parse the result page or response payload
-3. normalize result fields
-4. return structured data without embedding presentation logic
+1. 네이버 블로그 검색을 수행한다.
+2. 결과 페이지 또는 응답 payload를 파싱한다.
+3. 결과 필드를 정규화한다.
+4. 표현 로직을 섞지 않고 구조화된 데이터를 반환한다.
 
-### Tool 2: `fetch_naver_blog_content`
+### 도구 2: `fetch_naver_blog_content`
 
-Input:
+입력:
 
 - `url: str`
 
-Output:
+출력:
 
-- normalized blog content payload
+- 정규화된 블로그 본문 payload
 
-Fields:
+필드:
 
 - `title`
 - `url`
@@ -251,87 +251,87 @@ Fields:
 - `excerpt`
 - `fetch_status`
 
-Responsibilities:
+책임:
 
-1. load the target blog page
-2. extract meaningful textual content
-3. produce a short excerpt for preview responses
-4. expose structured failure information when extraction fails
+1. 대상 블로그 페이지를 불러온다.
+2. 의미 있는 텍스트 본문을 추출한다.
+3. preview 응답에 사용할 짧은 excerpt를 생성한다.
+4. 추출 실패 시 구조화된 실패 정보를 노출한다.
 
-## Tool Boundary Rules
+## 도구 경계 규칙
 
-To keep the architecture reusable:
+아키텍처를 재사용 가능하게 유지하기 위해 아래 원칙을 따른다.
 
-1. tools handle external access and extraction only
-2. graph nodes decide sequencing, retry, and status transitions
-3. API routes validate input and return response models only
+1. 도구는 외부 접근과 추출만 담당한다.
+2. graph node는 순서 제어, 재시도, 상태 전이를 담당한다.
+3. API route는 입력 검증과 응답 모델 반환만 담당한다.
 
-This separation is important because later phases will add ad filtering and review summarization without changing the search and fetch tool contracts.
+이 분리가 중요한 이유는, 다음 단계에서 광고 판별과 리뷰 요약이 추가되더라도 검색과 본문 수집 도구 계약은 그대로 유지할 수 있어야 하기 때문이다.
 
-## Failure Handling Policy
+## 실패 처리 정책
 
-The system should separate validation failure from workflow failure.
+이 시스템은 validation 실패와 workflow 실패를 분리해서 다룬다.
 
 ### Validation Failure
 
-Handled by Pydantic and FastAPI.
+Pydantic와 FastAPI가 처리한다.
 
-Behavior:
+동작:
 
-- return `422`
-- do not enter the workflow
+- `422` 반환
+- 워크플로우에 진입하지 않음
 
 ### Workflow Partial Failure
 
-Examples:
+예시:
 
-- search succeeds but one content fetch fails
-- search retry succeeds but some items remain unusable
+- 검색은 성공했지만 일부 본문 수집이 실패한 경우
+- 검색 재시도는 성공했지만 일부 결과가 여전히 사용 불가능한 경우
 
-Behavior:
+동작:
 
-- return `200`
-- set `status=partial_success`
-- include successful items
-- include structured errors with failure reasons
+- `200` 반환
+- `status=partial_success`
+- 성공한 item 포함
+- 실패 이유를 구조화한 `errors` 포함
 
 ### Workflow Complete Failure
 
-Examples:
+예시:
 
-- zero usable search results after retry
-- all content fetch attempts fail
+- 재시도 후에도 사용 가능한 검색 결과가 0건인 경우
+- 모든 본문 수집이 실패한 경우
 
-Behavior:
+동작:
 
-- return `200`
-- set `status=failed`
-- return empty or unusable items list
-- include structured errors explaining why the workflow failed
+- `200` 반환
+- `status=failed`
+- 비어 있거나 사용 불가능한 items 목록 반환
+- 왜 실패했는지 설명하는 구조화된 `errors` 포함
 
-## Self-Recovery Policy
+## 자기회복 정책
 
-The deep agent behavior in the first slice is intentionally narrow and deterministic.
+이번 1차에서의 딥 에이전트 동작은 의도적으로 좁고 결정적인 흐름으로 제한한다.
 
-Self-recovery includes:
+자기회복에는 아래가 포함된다.
 
-1. one fallback search query when the first query yields zero usable results
-2. one bounded retry path recorded in graph state
-3. continuation on partial fetch success instead of aborting the workflow
+1. 첫 검색 질의에서 사용 가능한 결과가 없을 때 fallback 검색 질의 1회 수행
+2. graph state에 기록되는 제한된 재시도 경로
+3. 일부 본문 수집 성공 시 전체 워크플로우를 중단하지 않고 계속 진행
 
-Self-recovery does not yet include:
+이번 단계에서 아직 포함하지 않는 자기회복 범위:
 
-1. open-ended autonomous planning
-2. ad-judgment loops
-3. multi-hop exploratory search
+1. 개방형 자율 계획
+2. 광고성 판단 루프
+3. 다단계 탐색형 검색
 
-This keeps the first workflow explainable and easier to debug while still proving the orchestration model.
+이렇게 하면 1차 워크플로우를 설명 가능하고 디버그하기 쉬운 형태로 유지하면서도, 오케스트레이션 모델 자체는 검증할 수 있다.
 
-## Langfuse Observability
+## Langfuse 관측 가능성
 
-The workflow must emit traceable metadata to Langfuse for both success and failure cases.
+워크플로우는 성공과 실패 모두에 대해 Langfuse에 추적 가능한 메타데이터를 남겨야 한다.
 
-Each request should produce one top-level trace for the preview workflow. Nodes and tool calls should contribute searchable metadata such as:
+각 요청은 preview 워크플로우에 대한 하나의 top-level trace를 생성해야 하며, 노드와 도구 호출은 아래와 같은 검색 가능한 메타데이터를 남길 수 있어야 한다.
 
 - `restaurant_name`
 - `region`
@@ -343,20 +343,20 @@ Each request should produce one top-level trace for the preview workflow. Nodes 
 - `fetch_failure_count`
 - `workflow_status`
 
-Per-URL failures should also be captured in a structured way when possible so operators can inspect why extraction failed.
+가능하다면 URL별 실패 원인도 구조화된 형태로 남겨서, 운영자가 Langfuse 안에서 바로 어떤 추출이 왜 실패했는지 확인할 수 있게 한다.
 
-Langfuse instrumentation should follow existing project patterns and must be attached to LLM and workflow execution paths consistently.
+Langfuse instrumentation은 현재 프로젝트의 기존 패턴을 따르며, LLM 호출과 워크플로우 실행 경로에 일관되게 부착해야 한다.
 
-## Logging and Error Handling
+## 로깅과 에러 처리
 
-Project rules from `AGENTS.md` apply:
+`AGENTS.md`의 프로젝트 규칙을 그대로 따른다.
 
-1. use `structlog`
-2. use lowercase underscore event names
-3. avoid f-strings in event messages
-4. use `logger.exception()` for exception cases that need tracebacks
+1. `structlog` 사용
+2. 이벤트 이름은 lowercase underscore 사용
+3. 이벤트 메시지에 f-string 사용 금지
+4. traceback이 필요한 예외는 `logger.exception()` 사용
 
-Representative event examples:
+대표적인 이벤트 예시:
 
 - `naver_blog_preview_request_received`
 - `naver_blog_search_started`
@@ -365,90 +365,78 @@ Representative event examples:
 - `naver_blog_content_fetch_failed`
 - `naver_blog_preview_workflow_completed`
 
-## API Layer Design
+## API 레이어 설계
 
-The route should live in a dedicated router module under `app/api/v1/`.
+라우트는 `app/api/v1/` 아래의 전용 router module에 둔다.
 
-The API layer should:
+API 레이어는 아래만 담당한다.
 
-1. accept the request model
-2. depend on authenticated session if the product keeps the current auth requirement
-3. invoke the new preview workflow service or graph adapter
-4. return a typed response model
-5. apply the standard rate limiting decorator
+1. 요청 모델 수신
+2. 현재 제품 정책상 인증이 필요하다면 session dependency 적용
+3. 새 preview workflow service 또는 graph adapter 호출
+4. 타입이 있는 response model 반환
+5. 표준 rate limiting decorator 적용
 
-The route should not contain scraping logic, parsing logic, or graph node logic.
+라우트 안에 스크래핑 로직, 파싱 로직, graph node 로직을 넣지 않는다.
 
-## Reusability for MCP and Messaging Channels
+## 프롬프트 및 스킬 컨텍스트 전략
 
-The workflow should be treated as a reusable capability, not as a one-off route implementation.
+이 워크플로우는 재사용 가능한 실행 정책으로 프롬프트 컨텍스트 또는 skill-like instruction bundle에 설명될 수 있어야 한다.
 
-That means three layers:
+이번 단계에서 재사용 컨텍스트는 아래 규칙을 담아야 한다.
 
-1. Python tools for Naver search and content extraction
-2. LangGraph workflow for orchestration and bounded self-recovery
-3. channel adapters such as FastAPI now, MCP or Discord later
+1. 입력은 `restaurant_name`과 `region`으로 제한한다.
+2. 워크플로우 목표는 검색 preview와 본문 수집 preview까지다.
+3. 광고성 판별은 아직 비활성 상태다.
+4. 실패는 `status`와 `errors`로 해석한다.
+5. 에이전트는 제한된 fallback 검색 재시도 1회를 수행할 수 있다.
 
-Future channels should call the same workflow or service boundary rather than reimplementing search logic.
+이렇게 하면 이후에 프롬프트 컨텍스트나 스킬 형태로 확장하더라도 동일한 운영 규칙을 재사용할 수 있다.
 
-## Prompt and Skill Context Strategy
+## 테스트 전략
 
-The workflow should be describable as a reusable execution policy in prompt context or a skill-like instruction bundle.
+1차 구현 계획에는 최소한 아래 테스트가 포함되어야 한다.
 
-The reusable context for this phase should state:
+1. 요청 모델 validation 테스트
+2. 응답 모델 테스트
+3. 상태 전이에 대한 graph node 단위 테스트
+4. 안정적인 fixture를 만들 수 있다면 mocked external response 기반 도구 계약 테스트
+5. 아래 경우에 대한 integration test
+   - 검색 성공
+   - 일부 본문 수집 실패
+   - 재시도 후 전체 실패
 
-1. inputs are limited to `restaurant_name` and `region`
-2. the workflow objective is search preview and content fetch preview only
-3. ad detection is not active in this phase
-4. workflow failures are communicated through `status` and `errors`
-5. the agent may perform one bounded fallback search retry
+테스트는 라이브 네이버 환경의 안정성보다, 결정적인 워크플로우 동작과 타입이 있는 응답 형태 검증에 집중해야 한다.
 
-This lets later agent surfaces reuse the same operating rules without coupling them to API-specific behavior.
+## 보안 및 운영 메모
 
-## Testing Strategy
+외부 컨텐츠 수집이 포함되므로 아래 운영 원칙을 둔다.
 
-The first implementation plan should include at least:
+1. `max_results` 상한선을 둔다.
+2. 검색 질의를 만들기 전에 사용자 입력을 sanitize 및 normalize 한다.
+3. 실패 결과를 성공 응답처럼 캐싱하지 않는다.
+4. timeout과 retry 동작을 도구 레이어에서 명시적으로 관리한다.
+5. 요청 수, 지연 시간, 실패 이유에 대한 관측 가능성을 유지한다.
 
-1. request model validation tests
-2. response model tests
-3. graph node unit tests for status transitions
-4. tool contract tests with mocked external responses when stable fixtures are available
-5. integration tests for:
-   - search success
-   - partial fetch failure
-   - complete failure after retry
+## 후속 단계
 
-Tests should focus on deterministic workflow behavior and typed response shape rather than on live Naver reliability.
+이번 1차 범위가 안정화된 뒤의 다음 단계는 아래와 같다.
 
-## Security and Operational Notes
+1. 광고성 판별 및 보수적 제외
+2. 좋은 평가와 나쁜 평가 요약
+3. 보조 검색 도구를 통한 자유문장 입력 지원
+4. 프롬프트 컨텍스트 또는 스킬 형태 확장
+5. 더 정교한 랭킹 및 평가 로직
 
-Because this workflow touches external content collection:
+## 권장 구현 계획 경계
 
-1. cap `max_results`
-2. sanitize and normalize user input before building the search query
-3. avoid caching failures as successful results
-4. keep timeout and retry behavior explicit at the tool layer
-5. preserve observability for rate, latency, and failure reasons
+다음 구현 계획은 아래 범위 안에 엄격하게 머물러야 한다.
 
-## Follow-Up Phases
+1. 새로운 request/response schema
+2. 전용 API route
+3. LangGraph preview workflow와 state schema
+4. search 및 content-fetch 도구 구현
+5. Langfuse에서 검색 가능한 workflow trace를 위한 instrumentation
+6. validation, 상태 전이, 응답 형태를 검증하는 기본 테스트
 
-After this first slice is stable, the next planned phases are:
-
-1. ad detection and conservative exclusion
-2. positive and negative review summarization
-3. free-form query support through auxiliary search tools
-4. MCP and messaging channel integration
-5. richer ranking and evaluation logic
-
-## Recommended Planning Boundary
-
-The next implementation plan should stay strictly inside this scope:
-
-1. new request and response schemas
-2. dedicated API route
-3. LangGraph preview workflow and state schema
-4. search and content-fetch tool implementations
-5. Langfuse instrumentation for searchable workflow traces
-6. basic tests for validation, workflow state transitions, and response shaping
-
-Anything beyond this should be deferred to a later plan.
+이 범위를 넘어가는 항목은 다음 계획으로 미룬다.
