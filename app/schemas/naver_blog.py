@@ -44,7 +44,6 @@ class NaverBlogPreviewItem(BaseModel):
     title: str
     url: str
     snippet: str = ""
-    blogger_name: str = ""
     published_at: Optional[str] = None
     excerpt: str = ""
     raw_text_available: bool = False

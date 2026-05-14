@@ -34,7 +34,6 @@ def test_preview_graph_includes_retry_metadata_in_response() -> None:
                 "title": "테스트 블로그",
                 "url": "https://blog.naver.com/test/1",
                 "snippet": "요약",
-                "blogger_name": "테스터",
                 "published_at": "",
             }
         ]
