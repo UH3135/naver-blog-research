@@ -8,5 +8,7 @@ and other external integrations.
 from langchain_core.tools.base import BaseTool
 
 from .duckduckgo_search import duckduckgo_search_tool
+from .naver_blog_content import fetch_naver_blog_content
+from .naver_blog_search import search_naver_blog
 
-tools: list[BaseTool] = [duckduckgo_search_tool]
+tools: list[BaseTool] = [duckduckgo_search_tool, search_naver_blog, fetch_naver_blog_content]

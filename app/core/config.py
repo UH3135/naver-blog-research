@@ -188,6 +188,7 @@ class Settings:
             "chat": ["30 per minute"],
             "chat_stream": ["20 per minute"],
             "messages": ["50 per minute"],
+            "naver_blog_preview": ["20 per minute"],
             "register": ["10 per hour"],
             "login": ["20 per minute"],
             "root": ["10 per minute"],

@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>네이버 블로그 Selector 기반 파서 재설계</title>
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --panel: #fffdf9;
+      --text: #1d1a17;
+      --muted: #5b534b;
+      --line: #ddd3c7;
+      --accent: #0f766e;
+      --accent-soft: #d9f3ef;
+      --code-bg: #f2eee8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      background:
+        radial-gradient(circle at top left, #efe6d6 0, transparent 28%),
+        linear-gradient(180deg, #f8f5ef 0%, #f3eee6 100%);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 48px 20px 80px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #18342f 0%, #24584e 100%);
+      color: #f7f8f4;
+      border-radius: 24px;
+      padding: 36px 32px;
+      box-shadow: 0 20px 60px rgba(24, 52, 47, 0.18);
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1.15;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 760px;
+      color: rgba(247, 248, 244, 0.88);
+      font-size: 1.05rem;
+    }
+
+    .content {
+      margin-top: 24px;
+      background: var(--panel);
+      border: 1px solid rgba(221, 211, 199, 0.9);
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: 0 18px 40px rgba(61, 44, 28, 0.08);
+    }
+
+    h2 {
+      margin-top: 40px;
+      margin-bottom: 14px;
+      font-size: 1.6rem;
+      line-height: 1.3;
+      color: #173c36;
+    }
+
+    h3 {
+      margin-top: 28px;
+      margin-bottom: 10px;
+      font-size: 1.15rem;
+      color: #214942;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul, ol {
+      margin: 0 0 18px 22px;
+      padding: 0;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    code {
+      font-family: "SFMono-Regular", "Menlo", "Monaco", monospace;
+      background: var(--code-bg);
+      padding: 0.12rem 0.4rem;
+      border-radius: 6px;
+      font-size: 0.94em;
+    }
+
+    pre {
+      margin: 16px 0 22px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      border-radius: 16px;
+      background: #171717;
+      color: #f5f5f5;
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+      color: inherit;
+    }
+
+    .callout {
+      margin: 18px 0 22px;
+      padding: 16px 18px;
+      border-left: 5px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 12px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      margin: 18px 0 22px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      background: #fffaf3;
+    }
+
+    .card h3 {
+      margin-top: 0;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    @media (max-width: 720px) {
+      .wrap {
+        padding: 24px 14px 48px;
+      }
+
+      .hero,
+      .content {
+        padding: 22px 18px;
+        border-radius: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>네이버 블로그 Selector 기반 파서 재설계</h1>
+      <p>광고성 문구가 <code>snippet</code> 으로 섞이는 문제를 해결하기 위해, 전역 regex 결합 방식에서 카드 단위 selector 기반 파서로 전환하는 설계 문서입니다.</p>
+    </section>
+
+    <main class="content">
+      <h2>개요</h2>
+      <p>이 문서는 <code>POST /api/v1/naver-blog/search-preview</code> 에서 발생한 잘못된 <code>snippet</code> 추출 문제를 해결하기 위한 서버 파서 재설계 방향을 정의합니다.</p>
+      <p>현재 문제는 네이버 검색 결과 페이지에서 블로그 카드 단위로 데이터를 읽지 않고, 페이지 전역에서 링크, 설명, 메타 텍스트를 따로 수집한 뒤 인덱스로 결합하는 방식 때문에 발생합니다. 그 결과 실제 블로그 요약 대신 프로모션 문구나 카드 바깥 설명 블록이 <code>snippet</code> 으로 채택되고, 제목과 블로거명이 서로 섞이는 현상이 생깁니다.</p>
+      <p>이번 설계의 목표는 정확도만 극단적으로 올리는 것이 아니라, 네이버 DOM 변화에 어느 정도 버티는 복원력 우선 파서를 만드는 것입니다.</p>
+
+      <h2>목표</h2>
+      <ol>
+        <li>검색 결과를 페이지 전역이 아니라 카드 단위로 파싱한다.</li>
+        <li>상세 글 URL을 블로그 홈 URL보다 우선 선택한다.</li>
+        <li>광고성, 프로모션 문구가 <code>snippet</code> 으로 채택되지 않도록 방지한다.</li>
+        <li>제목, 요약, 블로거명, 날짜를 각각 독립적으로 후보 수집 후 점수화한다.</li>
+        <li>일부 필드 추출 실패가 있어도 카드 자체는 가능한 한 유지한다.</li>
+        <li>DOM 구조가 일부 변해도 selector 하나가 깨졌다고 전체 파서가 무너지지 않게 한다.</li>
+      </ol>
+
+      <h2>비목표</h2>
+      <ol>
+        <li>Playwright 기반 런타임 스크래핑 전환</li>
+        <li>광고성 결과를 완전히 의미론적으로 판별하는 ML, LLM 도입</li>
+        <li>검색 결과 랭킹 자체의 고도화</li>
+        <li>블로그 본문 fetch 로직 개선</li>
+        <li>검색 결과 캐싱 정책 변경</li>
+      </ol>
+
+      <h2>확인된 원인</h2>
+      <p>재현 결과, 문제는 응답 조립 단계가 아니라 검색 파서 단계에서 이미 발생하고 있었습니다.</p>
+
+      <div class="grid">
+        <section class="card">
+          <h3>전역 Anchor 수집</h3>
+          <p><code>blog.naver.com</code> 링크를 카드 단위가 아니라 페이지 전역에서 수집합니다.</p>
+          <p class="muted">프로필 링크, 제목 링크, 본문 미리보기 링크, 썸네일 링크가 모두 별개 결과처럼 잡힙니다.</p>
+        </section>
+        <section class="card">
+          <h3>전역 Snippet 수집</h3>
+          <p><code>dsc_area</code>, <code>total_dsc</code>, <code>api_txt_lines</code> 계열 블록을 페이지 전역에서 수집합니다.</p>
+          <p class="muted">실제 블로그 카드 외부의 프로모션 설명 블록도 함께 매칭됩니다.</p>
+        </section>
+        <section class="card">
+          <h3>인덱스 기반 결합</h3>
+          <p>anchor 목록과 snippet 목록, blogger 목록을 같은 순서일 것이라고 가정해 결합합니다.</p>
+          <p class="muted">서로 다른 카드나 카드 외부 블록이 한 결과로 섞입니다.</p>
+        </section>
+      </div>
+
+      <div class="callout">
+        <strong>재현된 오탐 예시</strong>
+        <ul>
+          <li><code>좋아하는 건 누구나 남기고 싶으니까 클립 올리면 매주 쌓이는 Npay 포인트</code></li>
+          <li><code>컬리N마트 5O% 첫 구매 혜택 반값 쿠폰 받고 최대 2만원 적립까지</code></li>
+        </ul>
+      </div>
+
+      <h2>핵심 설계 원칙</h2>
+      <ol>
+        <li>카드 후보는 느슨하게 수집한다.</li>
+        <li>카드 내부 필드는 여러 후보를 수집한다.</li>
+        <li>필드별 후보는 규칙 기반 점수로 선택한다.</li>
+        <li>광고성 텍스트는 강한 필터로 제거한다.</li>
+        <li><code>snippet</code> 이 비더라도 상세 글 URL과 제목이 유효하면 카드는 살린다.</li>
+        <li>디버깅 가능한 점수와 선택 이유를 남긴다.</li>
+      </ol>
+
+      <h2>파서 아키텍처</h2>
+      <ol>
+        <li>HTML 로드</li>
+        <li>카드 후보 수집</li>
+        <li>카드별 필드 후보 수집</li>
+        <li>필드 후보 점수화</li>
+        <li>필드별 최고 점수 선택</li>
+        <li>카드 단위 통과, 탈락 판정</li>
+        <li>최종 결과 후처리</li>
+      </ol>
+
+      <pre><code>def search_naver_blog(query: str, max_results: int = 3) -&gt; list[dict[str, str]]:
+    html = _load_search_html(query)
+    return _parse_search_results(html=html, query=query, max_results=max_results)</code></pre>
+
+      <h2>데이터 구조</h2>
+
+      <h3>CardCandidate</h3>
+      <pre><code>@dataclass
+class CardCandidate:
+    card_id: str
+    html_fragment: str
+    text_content: str
+    source_selector: str</code></pre>
+
+      <h3>FieldCandidate</h3>
+      <pre><code>@dataclass
+class FieldCandidate:
+    kind: FieldKind
+    value: str
+    source_selector: str
+    source_attr: str | None = None
+    score: int = 0
+    reasons: list[str] = field(default_factory=list)</code></pre>
+
+      <h3>ParsedCard</h3>
+      <pre><code>@dataclass
+class ParsedCard:
+    card_id: str
+    url: str = ""
+    title: str = ""
+    snippet: str = ""
+    blogger_name: str = ""
+    published_at: str = ""
+    card_score: int = 0
+    accepted: bool = False
+    rejection_reason: str = ""
+    debug_notes: list[str] = field(default_factory=list)</code></pre>
+
+      <h2>함수 경계</h2>
+
+      <h3>1. 카드 후보 수집</h3>
+      <pre><code>def _collect_card_candidates(html: str, query: str) -&gt; list[CardCandidate]:
+    ...</code></pre>
+      <ol>
+        <li>상세 블로그 링크를 기준으로 카드 후보 컨테이너를 찾는다.</li>
+        <li>여러 selector 전략으로 후보를 폭넓게 수집한다.</li>
+        <li>같은 카드 후보를 중복 제거한다.</li>
+        <li>페이지 전체 래퍼처럼 너무 큰 상위 컨테이너는 제외한다.</li>
+      </ol>
+
+      <h3>2. 카드 내부 후보 수집</h3>
+      <pre><code>def _extract_field_candidates(
+    card: CardCandidate,
+    query: str,
+) -&gt; dict[FieldKind, list[FieldCandidate]]:
+    ...</code></pre>
+      <ol>
+        <li><code>url</code>, <code>title</code>, <code>snippet</code>, <code>blogger_name</code>, <code>published_at</code> 후보를 각각 여러 개 수집한다.</li>
+        <li>아직 탈락시키지 않고 가능한 후보를 넓게 모은다.</li>
+        <li>selector와 속성 출처를 같이 보존한다.</li>
+      </ol>
+
+      <h3>3. 후보 점수화</h3>
+      <pre><code>def _score_field_candidates(
+    candidates: dict[FieldKind, list[FieldCandidate]],
+    query: str,
+) -&gt; dict[FieldKind, list[FieldCandidate]]:
+    ...</code></pre>
+      <ol>
+        <li>각 후보에 점수와 이유를 부여한다.</li>
+        <li>프로모션 문구, 홈 URL, 프로필 링크 같은 약한 후보를 감점한다.</li>
+        <li>상세 글 URL, 제목형 anchor, 문장형 snippet 같은 강한 후보를 가점한다.</li>
+      </ol>
+
+      <h3>4. 카드 선택</h3>
+      <pre><code>def _select_best_card_fields(
+    candidates: dict[FieldKind, list[FieldCandidate]],
+    query: str,
+) -&gt; ParsedCard:
+    ...</code></pre>
+      <ol>
+        <li>필드별 최고 점수 후보를 선택한다.</li>
+        <li>카드 전체 점수를 계산한다.</li>
+        <li>최소 통과 기준 미달 카드는 탈락시킨다.</li>
+        <li><code>snippet</code> 만 실패한 경우 공란으로 허용할지 판단한다.</li>
+      </ol>
+
+      <h3>5. 최종 후처리</h3>
+      <pre><code>def _post_filter_results(
+    cards: list[ParsedCard],
+    query: str,
+    max_results: int,
+) -&gt; list[ParsedCard]:
+    ...</code></pre>
+      <ol>
+        <li>중복 URL 제거</li>
+        <li>상세 글 URL 우선 유지</li>
+        <li>빈 제목 카드 제거</li>
+        <li>광고성 결과 재검증</li>
+        <li>상위 <code>max_results</code> 개만 반환</li>
+      </ol>
+
+      <h2>카드 후보 Selector 전략</h2>
+
+      <h3>1차 후보: 상세 글 링크 기반</h3>
+      <ol>
+        <li><code>blog.naver.com/&lt;blog_id&gt;/&lt;post_id&gt;</code> 형태 URL을 가진 anchor를 찾는다.</li>
+        <li>해당 anchor의 가까운 상위 <code>div</code>, <code>li</code>, <code>section</code>, <code>article</code> 을 카드 후보로 승격한다.</li>
+        <li>텍스트가 지나치게 짧거나 링크가 하나뿐인 컨테이너는 제외한다.</li>
+      </ol>
+
+      <h3>2차 후보: 제목 anchor 기반</h3>
+      <ol>
+        <li>텍스트 길이가 충분한 상세 글 anchor를 찾는다.</li>
+        <li>그 anchor의 상위 컨테이너를 카드 후보로 추가한다.</li>
+        <li>프로필 anchor나 썸네일 전용 anchor는 제외한다.</li>
+      </ol>
+
+      <h3>3차 후보: 본문형 Preview 텍스트 기반</h3>
+      <ol>
+        <li>카드 내부에 20자 이상 문장형 텍스트 블록이 있는 상위 컨테이너를 후보로 추가한다.</li>
+        <li>광고 키워드만 포함한 블록은 후보에서 제외한다.</li>
+      </ol>
+
+      <h3>후보 정규화</h3>
+      <ol>
+        <li>동일 DOM 노드 중복 제거</li>
+        <li>텍스트 길이가 비정상적으로 큰 페이지 래퍼 제거</li>
+        <li>여러 카드가 섞인 공용 섹션 제거</li>
+      </ol>
+
+      <h2>필드 후보 우선순위</h2>
+
+      <h3>URL</h3>
+      <ol>
+        <li>최우선: <code>https://blog.naver.com/&lt;blog_id&gt;/&lt;post_id&gt;</code></li>
+        <li>차선: querystring 이 있어도 path 에 post id 가 있는 형태</li>
+        <li>최하위: <code>https://blog.naver.com/&lt;blog_id&gt;</code> 홈 링크</li>
+      </ol>
+
+      <h3>Title</h3>
+      <ol>
+        <li>최우선: 상세 글 URL anchor 텍스트</li>
+        <li>차선: 같은 anchor 내부의 headline 계열 <code>span</code>, <code>strong</code></li>
+        <li>제외: 프로필명, 본문 전체가 들어간 긴 anchor, 텍스트 없는 썸네일 anchor</li>
+      </ol>
+
+      <h3>Snippet</h3>
+      <ol>
+        <li>최우선: title anchor 와 같은 카드 안에서 가장 가까운 문장형 블록</li>
+        <li>차선: 카드 내부 preview 텍스트 블록</li>
+        <li>제외: 광고 키워드 포함 텍스트</li>
+        <li>제외: 카드 외부 공용 배너, 추천 텍스트</li>
+      </ol>
+
+      <h3>Blogger Name</h3>
+      <ol>
+        <li>최우선: 카드 메타영역의 짧은 닉네임형 텍스트</li>
+        <li>제외: 도메인 문자열, 긴 문장, 제목 재등장 텍스트</li>
+      </ol>
+
+      <h3>Published At</h3>
+      <ol>
+        <li>날짜 패턴이 보이는 메타 텍스트 우선</li>
+        <li>예: <code>2026. 1. 14.</code>, <code>12:40</code>, <code>3일 전</code></li>
+        <li>본문 문장 안 숫자는 제외</li>
+      </ol>
+
+      <h2>규칙 기반 점수 설계</h2>
+
+      <h3>URL 점수</h3>
+      <ol>
+        <li>상세 글 URL: <code>+8</code></li>
+        <li>제목 후보와 같은 anchor: <code>+3</code></li>
+        <li>블로그 홈 URL: <code>-4</code></li>
+      </ol>
+
+      <h3>Title 점수</h3>
+      <ol>
+        <li>상세 글 URL anchor 텍스트: <code>+5</code></li>
+        <li>길이 8~120자: <code>+3</code></li>
+        <li>검색어 일부 포함: <code>+2</code></li>
+        <li><code>mark</code> 하이라이트 포함: <code>+1</code></li>
+        <li>프로필명처럼 너무 짧음: <code>-3</code></li>
+        <li>본문형으로 지나치게 긴 텍스트: <code>-4</code></li>
+        <li>광고 키워드 포함: <code>-8</code></li>
+      </ol>
+
+      <h3>Snippet 점수</h3>
+      <ol>
+        <li>title 근처 카드 내부 텍스트: <code>+4</code></li>
+        <li>길이 20~300자: <code>+3</code></li>
+        <li>문장형 조사, 서술 포함: <code>+2</code></li>
+        <li>음식, 장소, 검색어 관련 단어 포함: <code>+2</code></li>
+        <li>광고 키워드 포함: <code>-10</code></li>
+        <li>슬로건형 짧은 문구: <code>-5</code></li>
+        <li>title 과 거의 동일: <code>-2</code></li>
+      </ol>
+
+      <h3>Blogger Name 점수</h3>
+      <ol>
+        <li>길이 2~30자 닉네임형: <code>+3</code></li>
+        <li>메타영역 위치: <code>+2</code></li>
+        <li>도메인 문자열 포함: <code>-5</code></li>
+        <li>문장형 텍스트: <code>-4</code></li>
+      </ol>
+
+      <h3>Published At 점수</h3>
+      <ol>
+        <li>날짜 패턴 일치: <code>+4</code></li>
+        <li>메타영역 위치: <code>+1</code></li>
+        <li>본문형 긴 문장 내부 숫자: <code>-3</code></li>
+      </ol>
+
+      <h2>광고성 텍스트 필터</h2>
+      <pre><code>def _is_promotional_text(text: str) -&gt; bool:
+    ...</code></pre>
+
+      <p>우선 감지 대상 예시는 아래와 같습니다.</p>
+      <ul>
+        <li><code>Npay</code></li>
+        <li><code>포인트</code></li>
+        <li><code>쿠폰</code></li>
+        <li><code>적립</code></li>
+        <li><code>첫 구매</code></li>
+        <li><code>스토어</code></li>
+        <li><code>브라우저</code></li>
+        <li><code>웨일</code></li>
+        <li><code>클립</code></li>
+      </ul>
+
+      <ol>
+        <li>키워드 1개는 약한 감점</li>
+        <li>키워드 2개 이상 또는 CTA 패턴 포함 시 강한 탈락</li>
+        <li><code>snippet</code> 이 광고 판정이면 카드 전체를 버리거나 최소한 <code>snippet=""</code> 로 강등</li>
+      </ol>
+
+      <h2>카드 통과 정책</h2>
+      <ol>
+        <li>상세 글 URL이 없으면 탈락</li>
+        <li>title 점수가 기준 이하이면 탈락</li>
+        <li><code>snippet</code> 이 광고 판정이면 공란 처리 또는 카드 탈락</li>
+        <li><code>blogger_name</code>, <code>published_at</code> 는 비어 있어도 허용</li>
+        <li><code>snippet</code> 이 비어 있어도 <code>url</code> 과 <code>title</code> 이 충분히 강하면 통과</li>
+      </ol>
+
+      <pre><code>card_score = url_score + title_score + max(snippet_score, 0) + meta_bonus
+
+MIN_CARD_SCORE = 10</code></pre>
+
+      <h2>Fallback 정책</h2>
+      <ol>
+        <li>카드 selector A 실패 시 selector B, C 로 재수집</li>
+        <li><code>snippet</code> 실패 시 빈 문자열 허용</li>
+        <li><code>blogger_name</code>, <code>published_at</code> 실패 시 빈 문자열 허용</li>
+        <li>상세 글 URL이 없는 카드만 남으면 결과에서 제외</li>
+      </ol>
+
+      <h2>테스트 전략</h2>
+
+      <h3>단위 테스트</h3>
+      <ol>
+        <li><code>_is_blog_post_url()</code></li>
+        <li><code>_is_blog_home_url()</code></li>
+        <li><code>_is_promotional_text()</code></li>
+        <li>각 <code>score_*_candidate()</code> 함수</li>
+      </ol>
+
+      <h3>파서 회귀 테스트</h3>
+      <ol>
+        <li>광고 문구가 <code>snippet</code> 으로 채택되지 않아야 한다.</li>
+        <li>상세 글 URL이 홈 URL보다 우선되어야 한다.</li>
+        <li>제목과 블로거명이 서로 섞이면 안 된다.</li>
+        <li><code>snippet=""</code> 는 허용되지만 광고 <code>snippet</code> 채택은 실패다.</li>
+      </ol>
+
+      <h3>재현 기반 검증</h3>
+      <p>쿼리 <code>중구 을지면옥 블로그</code> 에 대해 아래 문자열이 최종 <code>snippet</code> 에 포함되면 실패입니다.</p>
+      <ul>
+        <li><code>Npay</code></li>
+        <li><code>컬리N마트</code></li>
+        <li><code>웨일</code></li>
+      </ul>
+
+      <h2>로깅과 디버깅</h2>
+      <ol>
+        <li><code>naver_blog_card_candidates_collected</code></li>
+        <li><code>naver_blog_card_parsed</code></li>
+        <li><code>naver_blog_field_selected</code></li>
+        <li><code>naver_blog_card_rejected</code></li>
+        <li><code>naver_blog_promotional_text_detected</code></li>
+      </ol>
+      <p>각 로그는 selector, score, rejection reason 을 kwargs 로 남겨야 합니다.</p>
+
+      <h2>점진적 적용 전략</h2>
+
+      <h3>1단계</h3>
+      <ol>
+        <li>새 카드 기반 파서를 내부 함수로 추가한다.</li>
+        <li>기존 파서와 병렬 비교 로그만 남긴다.</li>
+      </ol>
+
+      <h3>2단계</h3>
+      <ol>
+        <li>새 파서 결과가 유효하면 우선 사용한다.</li>
+        <li>실패 시 기존 파서 fallback 을 유지한다.</li>
+      </ol>
+
+      <h3>3단계</h3>
+      <ol>
+        <li>충분히 안정화되면 기존 전역 regex 결합 방식을 제거한다.</li>
+      </ol>
+
+      <h2>구현 순서</h2>
+      <ol>
+        <li>URL, 광고, 검색어 헬퍼 함수 추가</li>
+        <li><code>CardCandidate</code>, <code>FieldCandidate</code>, <code>ParsedCard</code> 구조 추가</li>
+        <li>카드 후보 수집 구현</li>
+        <li>카드 내부 필드 후보 수집 구현</li>
+        <li>필드 점수화 및 선택 구현</li>
+        <li>후처리와 fallback 연결</li>
+        <li>회귀 테스트와 로깅 추가</li>
+      </ol>
+
+      <h2>결정 요약</h2>
+      <p>이번 수정은 selector 하나에 강하게 결합하는 방식이 아니라, 카드 후보를 느슨하게 모으고 카드 내부 필드를 규칙 기반으로 선택하는 복원력 우선 파서로 갑니다.</p>
+      <ol>
+        <li>광고성 문구의 <code>snippet</code> 오염 감소</li>
+        <li>홈 URL보다 상세 글 URL 우선</li>
+        <li>제목, 블로거명, 본문 preview 의 섞임 감소</li>
+        <li>DOM 일부 변경 시 전체 파서 붕괴 위험 완화</li>
+      </ol>
+    </main>
+  </div>
+</body>
+</html>
